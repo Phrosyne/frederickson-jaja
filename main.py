@@ -4,67 +4,74 @@ import networkx as nx
 # G0 = (V,A') a subgraph of G.
 
 def algorithm(G, links, root):
-    H = G.copy() #this should be a copy of G but for the autocomplete suggestions we will mark this as a graph for now
+    H = nx.DiGraph() #this should be a copy of G but we'll leave it like this for the autocomplete
+    H.add_nodes_from(G.nodes())
 
-#       1. For each edge 〈u, v〉 in A, let d〈u, v〉=0 if 〈v, u〉A' and let d〈u, v〉 = c〈v, u〉,
-#       otherwise.
+    """
+    1. For each edge 〈u, v〉 in A, let d〈u, v〉=0 if 〈v, u〉A' and let d〈u, v〉 = c〈v, u〉,
+    otherwise.
 
-
-    for u, v in H.edges:
-        H[u][v]['weight'] = 0
+    """
+    
+    for u, v in G.edges():
+        if u != root and v != root:
+            H.add_edge(u, v, weight=0)
 
     for u, v, w in links:
         H.add_edge(u, v, weight=w)
-        
-    # 2. Find a minimum weight spanning arborescence T=(V,Aa') with root r element of V on (V, A) using d. Set Aa={〈u, v〉|〈v, u〉Aa'}.
-        
-    RSA = H.reverse(copy=True)
-    
-            #root shouldnt have any leaving edges so we can force that by making its leaving edge inf. even if it does have leaving edges for all intents and purposes they might as well not be there
-    for u, v in list(RSA.out_edges(root)):
-        RSA[u][v]['weight'] = float('inf')
-    
-    
-    RSA = nx.minimum_spanning_arborescence(RSA, 'weight', True)
 
-    rsaEdges = [(v, u) for u, v in RSA.edges()]
+        """
+        2. Find a minimum weight spanning arborescence T=(V,Aa') with root rV on (V, A) using d. Set Aa={〈u, v〉|〈v, u〉Aa'}.
+
+        """
+
+    RSA = nx.minimum_spanning_arborescence(H.reverse(copy=True), attr='weight')
     
+    rsaEdges = [(v, u) for u, v in RSA.edges()]
     print(f"Pass 1 (RSA) found: {rsaEdges}")
 
-    for u, v in rsaEdges:
-        if H.has_edge(v, u):
-            H[u][v]['weight'] = 0
-            
-    for u, v in list(H.in_edges(root)):
-        H[u][v]['weight'] = float('inf')
+    # SA = nx.DiGraph()
 
-    sa = nx.minimum_spanning_arborescence(H, 'weight', 'weight', True)
+    SA = G.copy()
+    SA.add_edges_from(rsaEdges)
         
-    saEdges = list(sa.edges())
+    """
+    3. For each edge 〈u, v〉 in A, let d'〈u, v〉 = c〈u, v〉. If 〈u, v〉A'Aa, then set d'〈u, v〉=0. For all u, set d'〈u, r〉=∞.
 
+    """
+    for u, v, w in links:
+        if not SA.has_edge(u, v):
+            SA.add_edge(u, v, weight=w)
+
+    for u, v in list(SA.in_edges(root)):
+        SA[u][v]['weight'] = float('inf')
+
+    """
+    4. Find a minimum weight spanning arborescence T'=(V, Ab) on (V, A) using d'.
+
+    """
+
+    SA = nx.minimum_spanning_arborescence(SA, attr='weight')
+    saEdges = list(SA.edges())
     print(f"Pass 2 (SA) found: {saEdges}")
 
-    final_links = set(rsaEdges) | set(saEdges)
-    tree_edges = set(G.edges())
+    """
+    5. Set A''=(Aa U Ab)-A'.
+    """
+    # final union - original
+    return (set(rsaEdges) | set(saEdges)) - set(G.edges())
     
-    return final_links - tree_edges
     
     
-    
-# Create the Tree (Adjacency list of edges you already have)
-G_tree = nx.DiGraph()
-G_tree.add_edges_from([(0, 1), (1, 2)])
+G = nx.DiGraph()
+G.add_edges_from([(0, 1), (0, 2)])
 
-# Define Candidate Links (u, v, weight)
 candidates = [
+    (1, 0, 50),
+    (2, 0, 50),
+    (1, 2, 5),
     (2, 0, 10),
-    (2, 3, 5),
-    (3, 0, 5),
-    (0, 3, 20)
 ]
 
-# Run your function
-result = algorithm(G_tree, candidates, root=0)
-
+result = algorithm(G, candidates, root=0)
 print(f"Algorithm suggests buying: {result}")
-# EXPECTED OUTPUT: {(3, 0), (2, 3)}
